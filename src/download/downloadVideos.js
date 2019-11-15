@@ -9,6 +9,7 @@ const findNotExistingVideo = require("src/download/findNotExistingVideo");
 const findNotExistingSubtitle = require("src/download/findNotExistingSubtitle");
 const cleanLine = require("src/download/cleanLine");
 const writeWaitingInfo = require("src/download/writeWaitingInfo");
+const normalizeFileName = require("src/download/helpers");
 
 function downloadVideos(logger, videos, downloadFolder, lessonNumbers) {
   if (lessonNumbers !== null) {
@@ -71,16 +72,7 @@ function downloadAll(logger, videos, downloadFolder) {
 function downloadOneVideo(logger, downloadFolder, video, nextVideo) {
   let videoName = video.name.replace("Урок ", "").replace("\\", "");
 
-  // normalizing the number by adding padding to it ex: 1-foo.mp4 become 001-foo.mp4
-  let list = videoName.split(" ");
-
-  // Add padding from the start of the number
-  list[0] = list[0].padStart(3, "0");
-
-  // convert array to string
-  // replace spaces with dashes, is useful in *nix OS system for easy copping via terminal
-  videoName = list.join("-");
-
+  videoName = normalizeFileName(videoName)
 
   let subtitleUrl = video.url.replace(".mp4", ".vtt");
   console.log(`Start download video: ${videoName}`.blue);
@@ -95,6 +87,10 @@ function downloadOneVideo(logger, downloadFolder, video, nextVideo) {
     .on("end", function() {
       cleanLine();
       console.log(`End download video ${videoName}`.green);
+      // rename temporary filename
+      fs.copyFileSync(`${downloadFolder}${path.sep}${videoName}.mp4.part`, `${downloadFolder}${path.sep}${videoName}.mp4`)
+      // remove temporary filename
+      fs.unlinkSync(`${downloadFolder}${path.sep}${videoName}.mp4.part`)
       logger.write(`${videoName}\n`);
 
       progress(request(encodeURI(subtitleUrl)), { throttle: 2000, delay: 1000 })
@@ -123,7 +119,9 @@ function downloadOneVideo(logger, downloadFolder, video, nextVideo) {
 
       nextVideo();
     })
-    .pipe(fs.createWriteStream(`${downloadFolder}${path.sep}${videoName}.mp4`));
+    // download stream into a temporary filename, *.mp4.part
+    // this prevent the program to skip videos that are partially downloaded.
+    .pipe(fs.createWriteStream(`${downloadFolder}${path.sep}${videoName}.mp4.part`));
 }
 
 module.exports = downloadVideos;
